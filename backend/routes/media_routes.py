@@ -13,11 +13,12 @@ import mimetypes
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, BackgroundTasks, Form, status
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 
 from auth_middleware import get_current_user
 from database import supabase, embedder
-from config import GROQ_API_KEY, CHUNK_SIZE, CHUNK_OVERLAP
+from config import GROQ_API_KEY, GROQ_MODEL, GROQ_VISION_MODEL, CHUNK_SIZE, CHUNK_OVERLAP
 from ingest import run_ingestion
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from groq import Groq
@@ -252,9 +253,9 @@ async def analyze_image(
     mime = file.content_type or "image/png"
 
     try:
-        # Call Groq Vision API
-        response = client.chat.completions.create(
-            model="llama-3.2-90b-vision-preview",
+        # Call Groq Vision API (offloaded so it doesn't block the event loop)
+        response = await run_in_threadpool(lambda: client.chat.completions.create(
+            model=GROQ_VISION_MODEL,
             messages=[
                 {
                     "role": "user",
@@ -269,7 +270,7 @@ async def analyze_image(
             ],
             max_tokens=2000,
             temperature=0.3,
-        )
+        ))
 
         analysis = response.choices[0].message.content
 
@@ -280,7 +281,7 @@ async def analyze_image(
 
     except Exception as e:
         logger.error(f"Image analysis failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Image analysis failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Image analysis failed. Please try again.")
 
 
 # ─── Citation Verification ───
@@ -303,8 +304,9 @@ async def verify_citations(
             for s in body.sources
         )
 
-        result = client.chat.completions.create(
-            model="llama-3.1-8b-instant",
+        result = await run_in_threadpool(lambda: client.chat.completions.create(
+            model=GROQ_MODEL,
+            response_format={"type": "json_object"},
             messages=[
                 {
                     "role": "system",
@@ -335,7 +337,7 @@ The score should be 0-100 representing overall verification confidence. No markd
             ],
             max_tokens=2000,
             temperature=0.1,
-        )
+        ))
 
         raw = result.choices[0].message.content.strip()
 
@@ -408,8 +410,8 @@ async def generate_research_report(
             # Step 2: Generate deep-dive outline
             yield f"data: {json.dumps({'type': 'status', 'content': 'Architecting deep-dive research dossier...', 'step': 1})}\n\n"
 
-            outline_response = client.chat.completions.create(
-                model="llama-3.1-8b-instant",
+            outline_response = await run_in_threadpool(lambda: client.chat.completions.create(
+                model=GROQ_MODEL,
                 messages=[
                     {
                         "role": "system",
@@ -429,7 +431,7 @@ async def generate_research_report(
                 ],
                 max_tokens=500,
                 temperature=0.3,
-            )
+            ))
 
             raw_outline = outline_response.choices[0].message.content.strip()
             try:
@@ -447,8 +449,8 @@ async def generate_research_report(
             for i, section in enumerate(sections):
                 yield f"data: {json.dumps({'type': 'status', 'content': f'Investigating: {section}...', 'step': i + 2})}\n\n"
 
-                section_response = client.chat.completions.create(
-                    model="llama-3.1-8b-instant",
+                section_response = await run_in_threadpool(lambda section=section: client.chat.completions.create(
+                    model=GROQ_MODEL,
                     messages=[
                         {
                             "role": "system",
@@ -469,7 +471,7 @@ async def generate_research_report(
                     ],
                     max_tokens=1500,
                     temperature=0.4,
-                )
+                ))
 
                 section_text = section_response.choices[0].message.content
                 full_report += f"## {section}\n\n{section_text}\n\n"
@@ -529,8 +531,8 @@ async def ingest_drive(
         target_ext = "." + body.file_name.rsplit(".", 1)[-1] if "." in body.file_name else ".pdf"
 
     try:
-        with httpx.Client() as client:
-            resp = client.get(url, headers=headers, timeout=60.0)
+        with httpx.Client() as http:
+            resp = http.get(url, headers=headers, timeout=60.0)
             resp.raise_for_status()
             content = resp.content
     except Exception as e:
@@ -573,8 +575,9 @@ async def ingest_drive(
     background_tasks.add_task(
         run_ingestion,
         document_id=doc_id,
-        file_path=storage_path,
-        user_id=str(user.id)
+        storage_path=storage_path,
+        file_type=target_ext[1:],
+        user_id=str(user.id),
     )
 
     return {"id": doc_id, "status": "processing", "original_name": body.file_name}

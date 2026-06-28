@@ -12,11 +12,11 @@ from pydantic import BaseModel
 
 from auth_middleware import get_current_user
 from config import GROQ_API_KEY, GROQ_MODEL, TAVILY_API_KEY
-from groq import Groq
+from groq import AsyncGroq
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Search"])
-client = Groq(api_key=GROQ_API_KEY)
+client = AsyncGroq(api_key=GROQ_API_KEY)
 
 
 from typing import List, Optional
@@ -65,7 +65,7 @@ Latest User Query: {body.query}
 
 Respond with ONLY the raw search query string. Nothing else."""
 
-            query_response = client.chat.completions.create(
+            query_response = await client.chat.completions.create(
                 model=GROQ_MODEL,
                 messages=[{"role": "user", "content": query_prompt}],
                 max_tokens=50,
@@ -136,7 +136,7 @@ Guidelines:
                 chat_messages.append({"role": msg.role, "content": msg.content})
             chat_messages.append({"role": "user", "content": body.query})
 
-            stream = client.chat.completions.create(
+            stream = await client.chat.completions.create(
                 model=GROQ_MODEL,
                 messages=chat_messages,
                 stream=True,
@@ -144,7 +144,7 @@ Guidelines:
                 temperature=0.3,
             )
 
-            for chunk in stream:
+            async for chunk in stream:
                 delta = chunk.choices[0].delta
                 if delta and delta.content:
                     yield f'data: {json.dumps({"type": "token", "content": delta.content})}\n\n'

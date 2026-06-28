@@ -7,9 +7,11 @@ summary, flashcards, and mind map.
 # Maintenance: 2026-05-06
 
 import json
+import re
 import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 from typing import Optional
 
@@ -28,14 +30,42 @@ class StudioRequest(BaseModel):
 
 
 def _get_doc_chunks(document_id: str, user_id: str, limit: int = 15) -> list[dict]:
-    """Fetch chunks for a specific document."""
-    result = (
+    """
+    Fetch chunks for a document, sampled EVENLY across the whole document
+    rather than just the first N. This means studio features (quiz, summary,
+    flashcards, mind map) reflect the entire document, not only its opening pages.
+    """
+    count_res = (
         supabase.table("chunks")
-        .select("content")
+        .select("chunk_index", count="exact")
         .eq("document_id", document_id)
         .eq("user_id", user_id)
+        .execute()
+    )
+    total = count_res.count or 0
+
+    # Small docs: just take everything in order.
+    if total <= limit:
+        result = (
+            supabase.table("chunks")
+            .select("content, chunk_index")
+            .eq("document_id", document_id)
+            .eq("user_id", user_id)
+            .order("chunk_index")
+            .execute()
+        )
+        return result.data or []
+
+    # Large docs: pick `limit` evenly-spaced chunk indices spanning the document.
+    step = total / limit
+    wanted = sorted({int(i * step) for i in range(limit)})
+    result = (
+        supabase.table("chunks")
+        .select("content, chunk_index")
+        .eq("document_id", document_id)
+        .eq("user_id", user_id)
+        .in_("chunk_index", wanted)
         .order("chunk_index")
-        .limit(limit)
         .execute()
     )
     return result.data or []
@@ -62,18 +92,43 @@ def _build_context(chunks: list[dict], max_chars: int = 8000) -> str:
     return text
 
 
-def _generate(system: str, user_msg: str, max_tokens: int = 1500) -> str:
-    """Synchronous Groq generation."""
-    response = client.chat.completions.create(
-        model=GROQ_MODEL,
-        messages=[
+def _generate(system: str, user_msg: str, max_tokens: int = 1500, json_mode: bool = False) -> str:
+    """Synchronous Groq generation. When json_mode=True, asks Groq to emit a JSON object."""
+    kwargs = {
+        "model": GROQ_MODEL,
+        "messages": [
             {"role": "system", "content": system},
             {"role": "user", "content": user_msg},
         ],
-        max_tokens=max_tokens,
-        temperature=0.4,
-    )
+        "max_tokens": max_tokens,
+        "temperature": 0.4,
+    }
+    if json_mode:
+        kwargs["response_format"] = {"type": "json_object"}
+    response = client.chat.completions.create(**kwargs)
     return response.choices[0].message.content
+
+
+async def _agenerate(system: str, user_msg: str, max_tokens: int = 1500, json_mode: bool = False) -> str:
+    """Run the blocking Groq call in a threadpool so the event loop stays free."""
+    return await run_in_threadpool(_generate, system, user_msg, max_tokens, json_mode)
+
+
+def _parse_json(raw: str):
+    """Best-effort JSON parse: tries direct, then strips fences / extracts the object."""
+    cleaned = raw.strip()
+    if cleaned.startswith("```"):
+        cleaned = cleaned.split("\n", 1)[1] if "\n" in cleaned else cleaned[3:]
+    if cleaned.endswith("```"):
+        cleaned = cleaned.rsplit("```", 1)[0]
+    cleaned = cleaned.strip()
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        match = re.search(r'[\[{][\s\S]*[\]}]', cleaned)
+        if match:
+            return json.loads(match.group())
+        raise
 
 
 # ─── Key Topics Extraction ───
@@ -102,26 +157,17 @@ async def extract_key_topics(doc_id: str, user=Depends(get_current_user)):
         context = _build_context(chunks)
 
         system = """You are an expert academic content analyzer. Extract the key topics and concepts from the provided document content.
-Return ONLY a valid JSON array of objects, each with:
+Return ONLY a valid JSON object: {"topics": [ ... ]} where each item has:
 - "topic": a concise topic name (3-6 words max)
 - "description": a one-line summary of what this topic covers (under 15 words)
 
-Extract between 5 and 10 topics. Order them logically (as they appear in the document).
-Do NOT include any markdown, code fences, or explanation. ONLY the JSON array."""
+Extract between 5 and 10 topics. Order them logically (as they appear in the document)."""
 
         user_msg = f"Document: {doc.data['original_name']}\n\nContent:\n{context}"
 
-        raw = _generate(system, user_msg, max_tokens=800)
-        
-        # Clean up response - strip markdown fences if present
-        cleaned = raw.strip()
-        if cleaned.startswith("```"):
-            cleaned = cleaned.split("\n", 1)[1] if "\n" in cleaned else cleaned[3:]
-        if cleaned.endswith("```"):
-            cleaned = cleaned[:-3]
-        cleaned = cleaned.strip()
-
-        topics = json.loads(cleaned)
+        raw = await _agenerate(system, user_msg, max_tokens=800, json_mode=True)
+        parsed = _parse_json(raw)
+        topics = parsed.get("topics", parsed) if isinstance(parsed, dict) else parsed
         return {"topics": topics, "document_name": doc.data["original_name"]}
 
     except json.JSONDecodeError:
@@ -134,7 +180,7 @@ Do NOT include any markdown, code fences, or explanation. ONLY the JSON array.""
         raise HTTPException(status_code=429, detail="AI Rate limit exceeded. Please wait 1 minute.")
     except Exception as e:
         logger.error(f"Key topics extraction failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to extract key topics.")
 
 
 # ─── Document Overview + Suggestions ───
@@ -162,26 +208,20 @@ async def document_overview(doc_id: str, user=Depends(get_current_user)):
 
         context = _build_context(chunks)
 
-        result = _generate(
-            system="""You are Nexus. Given document chunks, produce a JSON response with:
+        result = await _agenerate(
+            system="""You are Nexus. Given document chunks, produce a JSON object with:
 1. "summary": A 2-3 sentence overview of what the document is about.
 2. "suggestions": An array of exactly 3 short, specific questions a user might ask about this document.
-Return ONLY valid JSON, no markdown fences.""",
+Return ONLY valid JSON.""",
             user_msg=f"Document: {doc.data['original_name']}\n\nContent:\n{context}",
             max_tokens=500,
+            json_mode=True,
         )
 
-        # Parse JSON from LLM
         try:
-            parsed = json.loads(result.strip())
+            parsed = _parse_json(result)
         except json.JSONDecodeError:
-            # Try to extract JSON from the response
-            import re
-            json_match = re.search(r'\{[\s\S]*\}', result)
-            if json_match:
-                parsed = json.loads(json_match.group())
-            else:
-                parsed = {"summary": "Could not generate overview.", "suggestions": []}
+            parsed = {"summary": "Could not generate overview.", "suggestions": []}
 
         return parsed
 
@@ -211,21 +251,19 @@ async def generate_quiz(body: StudioRequest, user=Depends(get_current_user)):
             raise HTTPException(status_code=400, detail="No content available.")
 
         context = _build_context(chunks)
-        result = _generate(
+        result = await _agenerate(
             system="""Generate a quiz with exactly 5 multiple-choice questions based on the provided content.
 Return ONLY valid JSON in this format:
-{"questions": [{"question": "...", "options": ["A) ...", "B) ...", "C) ...", "D) ..."], "answer": "A", "explanation": "..."}]}
-No markdown fences. No extra text.""",
+{"questions": [{"question": "...", "options": ["A) ...", "B) ...", "C) ...", "D) ..."], "answer": "A", "explanation": "..."}]}""",
             user_msg=context,
             max_tokens=2000,
+            json_mode=True,
         )
 
         try:
-            parsed = json.loads(result.strip())
+            parsed = _parse_json(result)
         except json.JSONDecodeError:
-            import re
-            json_match = re.search(r'\{[\s\S]*\}', result)
-            parsed = json.loads(json_match.group()) if json_match else {"questions": []}
+            parsed = {"questions": []}
 
         return parsed
 
@@ -255,7 +293,7 @@ async def generate_summary(body: StudioRequest, user=Depends(get_current_user)):
             raise HTTPException(status_code=400, detail="No content available.")
 
         context = _build_context(chunks)
-        result = _generate(
+        result = await _agenerate(
             system="""You are Nexus. Generate a comprehensive, well-structured executive summary of the provided content.
 Use Markdown formatting with headers, bullet points, and bold text.
 Include: Key Themes, Main Points, Important Details, and Conclusions.""",
@@ -291,21 +329,19 @@ async def generate_flashcards(body: StudioRequest, user=Depends(get_current_user
             raise HTTPException(status_code=400, detail="No content available.")
 
         context = _build_context(chunks)
-        result = _generate(
+        result = await _agenerate(
             system="""Generate exactly 8 study flashcards from the provided content.
 Return ONLY valid JSON in this format:
-{"cards": [{"front": "Question or term", "back": "Answer or definition"}]}
-No markdown fences. No extra text.""",
+{"cards": [{"front": "Question or term", "back": "Answer or definition"}]}""",
             user_msg=context,
             max_tokens=1500,
+            json_mode=True,
         )
 
         try:
-            parsed = json.loads(result.strip())
+            parsed = _parse_json(result)
         except json.JSONDecodeError:
-            import re
-            json_match = re.search(r'\{[\s\S]*\}', result)
-            parsed = json.loads(json_match.group()) if json_match else {"cards": []}
+            parsed = {"cards": []}
 
         return parsed
 
@@ -335,7 +371,7 @@ async def generate_mindmap(body: StudioRequest, user=Depends(get_current_user)):
             raise HTTPException(status_code=400, detail="No content available.")
 
         context = _build_context(chunks)
-        result = _generate(
+        result = await _agenerate(
             system="""Analyze the content and create a Mermaid.js mindmap diagram.
 Return ONLY the mermaid code, starting with 'mindmap' on the first line.
 Use proper indentation. Keep node labels short (max 5 words).
