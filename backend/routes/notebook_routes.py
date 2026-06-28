@@ -5,6 +5,7 @@ Create, list, update, and delete notebooks.
 
 import logging
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 from typing import Optional
 
@@ -268,24 +269,24 @@ async def synthesize_notebook(notebook_id: str, user=Depends(get_current_user)):
         if not GROQ_API_KEY:
             raise HTTPException(status_code=500, detail="LLM configuration missing (API Key).")
 
-        completion = client.chat.completions.create(
-            model=GROQ_MODEL,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.4,
-            max_tokens=2048,
+        completion = await run_in_threadpool(
+            lambda: client.chat.completions.create(
+                model=GROQ_MODEL,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.4,
+                max_tokens=2048,
+            )
         )
-        
+
         report_content = completion.choices[0].message.content
-        
+
         return {"report": report_content}
-        
+
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Failed to synthesize notebook {notebook_id}: {e}")
-        # Return the actual error message to help the user/dev diagnose
-        error_detail = str(e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Synthesis failed: {error_detail}",
+            detail="Failed to synthesize notebook. Please try again.",
         )

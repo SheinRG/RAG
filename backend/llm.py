@@ -7,14 +7,17 @@ import json
 import logging
 from typing import AsyncGenerator, List
 
-from groq import Groq, RateLimitError
+from groq import AsyncGroq, RateLimitError
 from config import GROQ_API_KEY, GROQ_MODEL
 from retriever import retrieve
 
 logger = logging.getLogger(__name__)
 
-# Initialize Groq client
-client = Groq(api_key=GROQ_API_KEY)
+# Async client so streaming/generation never blocks the event loop.
+client = AsyncGroq(api_key=GROQ_API_KEY)
+
+# Cap how much prior conversation we replay to keep token cost/context bounded.
+MAX_HISTORY_MESSAGES = 8
 
 
 def build_system_prompt(chunks: List[dict]) -> str:
@@ -73,14 +76,14 @@ async def ask_stream(
         # Step 4: Stream from Groq
         messages = [{"role": "system", "content": system_prompt}]
         if history:
-            for msg in history:
+            for msg in history[-MAX_HISTORY_MESSAGES:]:
                 role = msg.get("role", "user") if isinstance(msg, dict) else getattr(msg, "role", "user")
                 content = msg.get("content", "") if isinstance(msg, dict) else getattr(msg, "content", "")
                 if content:
                     messages.append({"role": role, "content": content})
         messages.append({"role": "user", "content": question})
 
-        stream = client.chat.completions.create(
+        stream = await client.chat.completions.create(
             model=GROQ_MODEL,
             messages=messages,
             stream=True,
@@ -88,7 +91,7 @@ async def ask_stream(
             temperature=0.2,
         )
 
-        for groq_chunk in stream:
+        async for groq_chunk in stream:
             delta = groq_chunk.choices[0].delta
             if delta and delta.content:
                 yield f"data: {json.dumps({'type': 'token', 'content': delta.content})}\n\n"
@@ -106,25 +109,27 @@ async def ask_stream(
 
         # Step 6: Generate follow-up suggestions
         try:
-            suggestion_prompt = f"""Based on the user's question and the document context provided, generate exactly 3 short follow-up questions the user might want to ask next. 
+            suggestion_prompt = f"""Based on the user's question and the document context provided, generate exactly 3 short follow-up questions the user might want to ask next.
 These should be directly related to the document content and the conversation topic.
 Keep each question concise (under 12 words).
 
 User's question: {question}
 
-Respond ONLY with a JSON array of 3 strings, nothing else. Example: ["Question 1?", "Question 2?", "Question 3?"]"""
+Respond ONLY with a JSON object of the form {{"questions": ["Q1?", "Q2?", "Q3?"]}}."""
 
-            suggestion_resp = client.chat.completions.create(
+            suggestion_resp = await client.chat.completions.create(
                 model=GROQ_MODEL,
+                response_format={"type": "json_object"},
                 messages=[
-                    {"role": "system", "content": "You generate follow-up research questions. Respond ONLY with a valid JSON array of strings."},
+                    {"role": "system", "content": "You generate follow-up research questions. Respond ONLY with a valid JSON object {\"questions\": [...]}"},
                     {"role": "user", "content": suggestion_prompt},
                 ],
                 max_tokens=150,
                 temperature=0.6,
             )
             raw = suggestion_resp.choices[0].message.content.strip()
-            suggestions = json.loads(raw)
+            parsed = json.loads(raw)
+            suggestions = parsed.get("questions", []) if isinstance(parsed, dict) else parsed
             if isinstance(suggestions, list) and len(suggestions) > 0:
                 yield f"data: {json.dumps({'type': 'suggestions', 'content': suggestions[:3]})}\n\n"
         except Exception as e:
