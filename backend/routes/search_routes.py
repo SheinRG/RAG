@@ -46,7 +46,13 @@ async def web_search(body: WebSearchRequest, user=Depends(get_current_user)):
             # Step 1: Get document context if available
             doc_context = ""
             if body.document_id:
-                doc_res = supabase.table("documents").select("original_name").eq("id", body.document_id).execute()
+                doc_res = (
+                    supabase.table("documents")
+                    .select("original_name")
+                    .eq("id", body.document_id)
+                    .eq("user_id", str(user.id))
+                    .execute()
+                )
                 if doc_res.data:
                     doc_context = f"The user is currently viewing a document named '{doc_res.data[0]['original_name']}'."
 

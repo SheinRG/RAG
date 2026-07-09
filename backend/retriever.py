@@ -46,7 +46,13 @@ def retrieve(
         if document_ids and chunks:
             chunks = [c for c in chunks if c.get("document_id") in document_ids]
         elif notebook_id and chunks:
-            doc_res = supabase.table("documents").select("id").eq("notebook_id", notebook_id).execute()
+            doc_res = (
+                supabase.table("documents")
+                .select("id")
+                .eq("notebook_id", notebook_id)
+                .eq("user_id", user_id)
+                .execute()
+            )
             valid_doc_ids = {d["id"] for d in doc_res.data}
             chunks = [c for c in chunks if c.get("document_id") in valid_doc_ids]
 
