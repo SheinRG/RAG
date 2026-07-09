@@ -156,7 +156,7 @@ const useChatStore = create(
                   flushTokens();
                   set({ isStreaming: false });
                 }
-              } catch { }
+              } catch { /* ignore malformed SSE line */ }
             }
           }
           if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
