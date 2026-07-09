@@ -161,7 +161,7 @@ Guidelines:
 
         except Exception as e:
             logger.error(f"Web search failed: {e}")
-            yield f'data: {json.dumps({"type": "error", "content": f"Search failed: {str(e)}"})}\n\n'
+            yield f'data: {json.dumps({"type": "error", "content": "Web search failed. Please try again."})}\n\n'
             yield f'data: {json.dumps({"type": "done"})}\n\n'
 
     return StreamingResponse(

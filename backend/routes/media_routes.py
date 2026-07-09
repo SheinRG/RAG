@@ -495,7 +495,7 @@ async def generate_research_report(
 
         except Exception as e:
             logger.error(f"Research report failed: {e}")
-            yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
+            yield f"data: {json.dumps({'type': 'error', 'content': 'Failed to generate the research report. Please try again.'})}\n\n"
             yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
     return StreamingResponse(
