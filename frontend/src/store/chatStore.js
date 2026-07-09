@@ -8,13 +8,12 @@ const useChatStore = create(
       messages: [],
       isStreaming: false,
       activeDocumentIds: [],
-      messageHistory: {},
-      notebookHistory: {}, // { [nbId]: { messages, activeDocumentIds, messageHistory } }
+      notebookHistory: {}, // { [nbId]: { messages, activeDocumentIds } }
       currentNotebookId: null,
 
       switchNotebook: (notebookId) => {
-        const { currentNotebookId, messages, activeDocumentIds, messageHistory, notebookHistory } = get();
-        
+        const { currentNotebookId, messages, activeDocumentIds, notebookHistory } = get();
+
         if (notebookId === currentNotebookId) return;
 
         const newNotebookHistory = { ...notebookHistory };
@@ -22,23 +21,20 @@ const useChatStore = create(
           const key = currentNotebookId || 'default';
           newNotebookHistory[key] = {
             messages,
-            activeDocumentIds,
-            messageHistory
+            activeDocumentIds
           };
         }
 
         const targetKey = notebookId || 'default';
         const saved = newNotebookHistory[targetKey] || {
           messages: [],
-          activeDocumentIds: [],
-          messageHistory: {}
+          activeDocumentIds: []
         };
 
         set({
           currentNotebookId: notebookId,
           messages: saved.messages,
           activeDocumentIds: saved.activeDocumentIds,
-          messageHistory: saved.messageHistory,
           notebookHistory: newNotebookHistory
         });
       },
@@ -52,11 +48,6 @@ const useChatStore = create(
           
           return { activeDocumentIds: newIds };
         });
-      },
-
-      setActiveDocument: (docId) => {
-        // Legacy support if needed, set single active
-        set({ activeDocumentIds: docId ? [docId] : [] });
       },
 
       sendMessage: async (question) => {
@@ -165,7 +156,7 @@ const useChatStore = create(
                   flushTokens();
                   set({ isStreaming: false });
                 }
-              } catch { }
+              } catch { /* ignore malformed SSE line */ }
             }
           }
           if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
@@ -193,12 +184,11 @@ const useChatStore = create(
     {
       name: 'nexus-chat-storage',
       storage: createJSONStorage(() => localStorage),
-      partialize: (state) => ({ 
+      partialize: (state) => ({
         notebookHistory: state.notebookHistory,
         currentNotebookId: state.currentNotebookId,
         messages: state.messages,
         activeDocumentIds: state.activeDocumentIds,
-        messageHistory: state.messageHistory,
       }),
     }
   )

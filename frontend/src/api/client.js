@@ -7,7 +7,7 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
-// Irenject auth token on every quest
+// Inject auth token on every request
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('access_token');
   if (token) {

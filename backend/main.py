@@ -9,8 +9,12 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 
 from config import ALLOWED_ORIGINS, ENVIRONMENT
+from rate_limit import limiter
 from routes.auth_routes import router as auth_router
 from routes.document_routes import router as document_router
 from routes.query_routes import router as query_router
@@ -74,12 +78,20 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# ─── Rate limiting ───
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
+
 # ─── Middleware ───
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
-    allow_credentials=True,
+    # Auth is Bearer-token based (Authorization header), not cookies, so credentialed
+    # CORS is unnecessary — disabling it avoids accidental cookie exposure.
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )

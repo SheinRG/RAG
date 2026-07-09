@@ -8,6 +8,7 @@ import os
 import gc
 import logging
 import tempfile
+import zipfile
 from typing import List
 
 from langchain_core.documents import Document
@@ -45,9 +46,29 @@ def download_from_storage(storage_path: str) -> str:
         raise
 
 
+# Reject Office/zip files whose declared uncompressed size is implausibly large,
+# so a small "zip bomb" upload can't exhaust memory on the 512MB host.
+MAX_UNCOMPRESSED_BYTES = 200 * 1024 * 1024
+
+
+def _guard_zip_bomb(file_path: str) -> None:
+    """Raise if a zip-based file (docx/pptx/xlsx) expands beyond the safe limit."""
+    if not zipfile.is_zipfile(file_path):
+        return
+    total = 0
+    with zipfile.ZipFile(file_path) as zf:
+        for info in zf.infolist():
+            total += info.file_size
+            if total > MAX_UNCOMPRESSED_BYTES:
+                raise ValueError("Archive expands too large to process safely.")
+
+
 def parse_document(file_path: str, file_type: str) -> List[Document]:
     """Parse a document file into LangChain Document objects."""
     try:
+        if file_type in ("docx", "pptx", "xlsx", "xls"):
+            _guard_zip_bomb(file_path)
+
         if file_type == "pdf":
             import fitz
             doc = fitz.open(file_path)

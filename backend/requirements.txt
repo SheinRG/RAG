@@ -7,9 +7,10 @@ PyMuPDF
 python-multipart
 python-dotenv
 pydantic[email]
+pyjwt
+slowapi
 httpx
 numpy
-duckduckgo-search
 youtube-transcript-api
 Pillow
 google-api-python-client==2.194.0

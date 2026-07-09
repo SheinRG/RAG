@@ -83,7 +83,7 @@ def _get_all_chunks(user_id: str, limit: int = 20) -> list[dict]:
     return result.data or []
 
 
-def _build_context(chunks: list[dict], max_chars: int = 8000) -> str:
+def _build_context(chunks: list[dict], max_chars: int = 12000) -> str:
     if not chunks:
         return "No content available."
     text = "\n\n".join(c["content"] for c in chunks)

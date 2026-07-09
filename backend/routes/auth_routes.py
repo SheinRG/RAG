@@ -4,47 +4,38 @@ Wraps Supabase Auth for signup, login, and user info.
 """
 
 import logging
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from supabase_auth.errors import AuthApiError
 
 from database import supabase
 from auth_middleware import get_current_user
 from models.schemas import AuthRequest, AuthResponse, UserResponse, MessageResponse
+from rate_limit import limiter
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Authentication"])
 
 
 @router.post("/register", response_model=MessageResponse)
-async def register(body: AuthRequest):
+@limiter.limit("10/minute")
+async def register(request: Request, body: AuthRequest):
     """Register a new user via Supabase Auth."""
+    # Always return the same neutral message so this endpoint can't be used to
+    # enumerate which emails already have an account.
+    neutral = MessageResponse(
+        message="If that email is available, we've sent a confirmation link. Please check your inbox."
+    )
     try:
-        response = supabase.auth.sign_up({
+        supabase.auth.sign_up({
             "email": body.email,
             "password": body.password,
         })
+        return neutral
 
-        # Supabase returns user even if email already exists (with no session)
-        if response.user and response.session is None:
-            # Check if it's because the user already exists (identities empty)
-            if hasattr(response.user, 'identities') and len(response.user.identities) == 0:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="An account with this email already exists.",
-                )
-
-        return MessageResponse(
-            message="Account created! Check your email to confirm your account."
-        )
-
-    except HTTPException:
-        raise
     except AuthApiError as e:
-        logger.error(f"Registration failed: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        # Log the real reason; don't reveal it (avoids enumeration / detail leak).
+        logger.warning(f"Registration AuthApiError: {e}")
+        return neutral
     except Exception as e:
         logger.error(f"Registration error: {e}")
         raise HTTPException(
@@ -54,7 +45,8 @@ async def register(body: AuthRequest):
 
 
 @router.post("/login", response_model=AuthResponse)
-async def login(body: AuthRequest):
+@limiter.limit("10/minute")
+async def login(request: Request, body: AuthRequest):
     """Log in an existing user and return an access token."""
     try:
         response = supabase.auth.sign_in_with_password({

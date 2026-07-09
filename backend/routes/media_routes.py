@@ -12,14 +12,16 @@ import httpx
 import mimetypes
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, BackgroundTasks, Form, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, BackgroundTasks, Form, Request, status
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 
 from auth_middleware import get_current_user
+from rate_limit import limiter
 from database import supabase, embedder
 from config import GROQ_API_KEY, GROQ_MODEL, GROQ_VISION_MODEL, CHUNK_SIZE, CHUNK_OVERLAP
 from ingest import run_ingestion
+from retriever import retrieve
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from groq import Groq
 
@@ -367,7 +369,9 @@ class ResearchRequest(BaseModel):
 
 
 @router.post("/research-report")
+@limiter.limit("10/minute")
 async def generate_research_report(
+    request: Request,
     body: ResearchRequest,
     user=Depends(get_current_user),
 ):
@@ -449,13 +453,23 @@ async def generate_research_report(
             for i, section in enumerate(sections):
                 yield f"data: {json.dumps({'type': 'status', 'content': f'Investigating: {section}...', 'step': i + 2})}\n\n"
 
-                section_response = await run_in_threadpool(lambda section=section: client.chat.completions.create(
+                # Retrieve context specific to THIS section so sections don't all
+                # rehash the same opening slice. Fall back to the shared context.
+                section_chunks = await run_in_threadpool(
+                    retrieve, f"{body.prompt}: {section}", str(user.id), 8, (body.document_ids or None)
+                )
+                if section_chunks:
+                    section_context = "\n\n".join(c["content"] for c in section_chunks)[:6000]
+                else:
+                    section_context = context[:6000]
+
+                section_response = await run_in_threadpool(lambda section=section, ctx=section_context: client.chat.completions.create(
                     model=GROQ_MODEL,
                     messages=[
                         {
                             "role": "system",
                             "content": f"""You are a Senior Research Analyst writing the section "{section}" for a formal research dossier titled "{body.prompt}".
-                            
+
                             Instructions:
                             - Write 3-5 comprehensive, analytical paragraphs.
                             - Use a professional, academic tone.
@@ -466,7 +480,7 @@ async def generate_research_report(
                         },
                         {
                             "role": "user",
-                            "content": f"Document content:\n{context[:6000]}",
+                            "content": f"Document content:\n{ctx}",
                         },
                     ],
                     max_tokens=1500,
@@ -484,7 +498,7 @@ async def generate_research_report(
 
         except Exception as e:
             logger.error(f"Research report failed: {e}")
-            yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
+            yield f"data: {json.dumps({'type': 'error', 'content': 'Failed to generate the research report. Please try again.'})}\n\n"
             yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
     return StreamingResponse(
@@ -513,6 +527,11 @@ async def ingest_drive(
     user=Depends(get_current_user),
 ):
     """Download a file from Google Drive and ingest."""
+    # Validate the file ID before interpolating it into the googleapis URL path
+    # (prevents path/query injection into the Google API request).
+    if not re.fullmatch(r"[a-zA-Z0-9_-]{10,128}", body.file_id):
+        raise HTTPException(status_code=400, detail="Invalid Google Drive file ID.")
+
     headers = {"Authorization": f"Bearer {body.access_token}"}
     
     is_google_workspace = body.mime_type and body.mime_type.startswith("application/vnd.google-apps")

@@ -1,6 +1,6 @@
 """
 Nexus — Web Search Routes
-Global search using DuckDuckGo + Groq for AI-synthesized answers.
+Global search using Tavily + Groq for AI-synthesized answers.
 """
 
 import json
@@ -46,7 +46,13 @@ async def web_search(body: WebSearchRequest, user=Depends(get_current_user)):
             # Step 1: Get document context if available
             doc_context = ""
             if body.document_id:
-                doc_res = supabase.table("documents").select("original_name").eq("id", body.document_id).execute()
+                doc_res = (
+                    supabase.table("documents")
+                    .select("original_name")
+                    .eq("id", body.document_id)
+                    .eq("user_id", str(user.id))
+                    .execute()
+                )
                 if doc_res.data:
                     doc_context = f"The user is currently viewing a document named '{doc_res.data[0]['original_name']}'."
 
@@ -132,7 +138,7 @@ Guidelines:
 {doc_context}"""
 
             chat_messages = [{"role": "system", "content": system_prompt}]
-            for msg in body.history[-4:]:
+            for msg in (body.history or [])[-4:]:
                 chat_messages.append({"role": msg.role, "content": msg.content})
             chat_messages.append({"role": "user", "content": body.query})
 
@@ -155,7 +161,7 @@ Guidelines:
 
         except Exception as e:
             logger.error(f"Web search failed: {e}")
-            yield f'data: {json.dumps({"type": "error", "content": f"Search failed: {str(e)}"})}\n\n'
+            yield f'data: {json.dumps({"type": "error", "content": "Web search failed. Please try again."})}\n\n'
             yield f'data: {json.dumps({"type": "done"})}\n\n'
 
     return StreamingResponse(

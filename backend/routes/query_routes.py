@@ -9,7 +9,6 @@ from fastapi.responses import StreamingResponse
 
 from auth_middleware import get_current_user
 from llm import ask_stream
-from models.schemas import AskRequest
 from pydantic import BaseModel
 
 
