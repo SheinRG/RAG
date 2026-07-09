@@ -20,6 +20,7 @@ from auth_middleware import get_current_user
 from database import supabase, embedder
 from config import GROQ_API_KEY, GROQ_MODEL, GROQ_VISION_MODEL, CHUNK_SIZE, CHUNK_OVERLAP
 from ingest import run_ingestion
+from retriever import retrieve
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from groq import Groq
 
@@ -449,13 +450,23 @@ async def generate_research_report(
             for i, section in enumerate(sections):
                 yield f"data: {json.dumps({'type': 'status', 'content': f'Investigating: {section}...', 'step': i + 2})}\n\n"
 
-                section_response = await run_in_threadpool(lambda section=section: client.chat.completions.create(
+                # Retrieve context specific to THIS section so sections don't all
+                # rehash the same opening slice. Fall back to the shared context.
+                section_chunks = await run_in_threadpool(
+                    retrieve, f"{body.prompt}: {section}", str(user.id), 8, (body.document_ids or None)
+                )
+                if section_chunks:
+                    section_context = "\n\n".join(c["content"] for c in section_chunks)[:6000]
+                else:
+                    section_context = context[:6000]
+
+                section_response = await run_in_threadpool(lambda section=section, ctx=section_context: client.chat.completions.create(
                     model=GROQ_MODEL,
                     messages=[
                         {
                             "role": "system",
                             "content": f"""You are a Senior Research Analyst writing the section "{section}" for a formal research dossier titled "{body.prompt}".
-                            
+
                             Instructions:
                             - Write 3-5 comprehensive, analytical paragraphs.
                             - Use a professional, academic tone.
@@ -466,7 +477,7 @@ async def generate_research_report(
                         },
                         {
                             "role": "user",
-                            "content": f"Document content:\n{context[:6000]}",
+                            "content": f"Document content:\n{ctx}",
                         },
                     ],
                     max_tokens=1500,
