@@ -132,7 +132,7 @@ Guidelines:
 {doc_context}"""
 
             chat_messages = [{"role": "system", "content": system_prompt}]
-            for msg in body.history[-4:]:
+            for msg in (body.history or [])[-4:]:
                 chat_messages.append({"role": msg.role, "content": msg.content})
             chat_messages.append({"role": "user", "content": body.query})
 
