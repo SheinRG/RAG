@@ -87,7 +87,7 @@ async def ask_stream(
             model=GROQ_MODEL,
             messages=messages,
             stream=True,
-            max_tokens=1024,
+            max_tokens=2048,
             temperature=0.2,
         )
 
