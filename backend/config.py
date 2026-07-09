@@ -11,6 +11,9 @@ load_dotenv()
 # ─── Supabase ───
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
 SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "")
+# Shared JWT secret — enables fast local token verification (skips the per-request
+# Supabase Auth round-trip). If unset, auth falls back to supabase.auth.get_user().
+SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET", "")
 
 # ─── Groq ───
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
