@@ -9,7 +9,6 @@ python-dotenv
 pydantic[email]
 httpx
 numpy
-duckduckgo-search
 youtube-transcript-api
 Pillow
 google-api-python-client==2.194.0

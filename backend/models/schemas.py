@@ -58,21 +58,3 @@ class DocumentUploadResponse(BaseModel):
 
 class DocumentRenameRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
-
-
-# ─── Query Schemas ───
-
-class AskRequest(BaseModel):
-    question: str = Field(..., min_length=1, max_length=500)
-
-
-class SourceInfo(BaseModel):
-    document_id: str
-    source: str
-    content: str
-    similarity: float
-
-
-class AskResponse(BaseModel):
-    answer: str
-    sources: List[SourceInfo]

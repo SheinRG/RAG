@@ -24,8 +24,7 @@ def retrieve(
 ) -> List[dict]:
     """
     Embeds the query and performs cosine similarity search against user's chunks.
-    Optionally filters by document_id or notebook_id.
-    Optionally filters by a list of document_ids or notebook_id.
+    Optionally filters by a list of document_ids or a notebook_id.
     Returns a list of dicts with content, document_id, source name, and similarity score.
     """
     try:

@@ -70,10 +70,10 @@ async def ask_stream(
 
         chunks = retrieve(retrieval_query, user_id, document_ids=document_ids, notebook_id=notebook_id)
 
-        # Step 3: Build prompt
+        # Step 2: Build prompt
         system_prompt = build_system_prompt(chunks)
 
-        # Step 4: Stream from Groq
+        # Step 3: Stream from Groq
         messages = [{"role": "system", "content": system_prompt}]
         if history:
             for msg in history[-MAX_HISTORY_MESSAGES:]:
@@ -96,7 +96,7 @@ async def ask_stream(
             if delta and delta.content:
                 yield f"data: {json.dumps({'type': 'token', 'content': delta.content})}\n\n"
 
-        # Step 5: Send source information with chunks
+        # Step 4: Send source information with chunks
         sources_map = {}
         for chunk in chunks:
             src = chunk["source"]
@@ -107,7 +107,7 @@ async def ask_stream(
         formatted_sources = [{"name": k, "chunks": v} for k, v in sources_map.items()]
         yield f"data: {json.dumps({'type': 'sources', 'content': formatted_sources})}\n\n"
 
-        # Step 6: Generate follow-up suggestions
+        # Step 5: Generate follow-up suggestions
         try:
             suggestion_prompt = f"""Based on the user's question and the document context provided, generate exactly 3 short follow-up questions the user might want to ask next.
 These should be directly related to the document content and the conversation topic.
@@ -135,7 +135,7 @@ Respond ONLY with a JSON object of the form {{"questions": ["Q1?", "Q2?", "Q3?"]
         except Exception as e:
             logger.warning(f"Failed to generate suggestions: {e}")
 
-        # Step 7: Send done signal
+        # Step 6: Send done signal
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
     except RateLimitError as e:

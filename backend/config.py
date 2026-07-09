@@ -15,8 +15,7 @@ SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "")
 # ─── Groq ───
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 GROQ_MODEL = "llama-3.1-8b-instant"
-# Vision-capable model. NOTE: verify against Groq's current catalog —
-# the old "llama-3.2-90b-vision-preview" was decommissioned.
+# Vision-capable model (override via env if Groq's catalog changes).
 GROQ_VISION_MODEL = os.getenv("GROQ_VISION_MODEL", "meta-llama/llama-4-scout-17b-16e-instruct")
 
 # ─── Tavily ───

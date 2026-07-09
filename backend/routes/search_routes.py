@@ -1,6 +1,6 @@
 """
 Nexus — Web Search Routes
-Global search using DuckDuckGo + Groq for AI-synthesized answers.
+Global search using Tavily + Groq for AI-synthesized answers.
 """
 
 import json
