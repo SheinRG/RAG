@@ -46,6 +46,5 @@ ALLOWED_EXTENSIONS = [".pdf", ".txt", ".md", ".csv", ".docx", ".pptx", ".xlsx", 
 STORAGE_BUCKET = "documents"
 
 # ─── App ───
-SECRET_KEY = os.getenv("SECRET_KEY", "change-me-in-production")
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
 ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173").split(",")

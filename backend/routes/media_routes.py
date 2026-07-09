@@ -524,6 +524,11 @@ async def ingest_drive(
     user=Depends(get_current_user),
 ):
     """Download a file from Google Drive and ingest."""
+    # Validate the file ID before interpolating it into the googleapis URL path
+    # (prevents path/query injection into the Google API request).
+    if not re.fullmatch(r"[a-zA-Z0-9_-]{10,128}", body.file_id):
+        raise HTTPException(status_code=400, detail="Invalid Google Drive file ID.")
+
     headers = {"Authorization": f"Bearer {body.access_token}"}
     
     is_google_workspace = body.mime_type and body.mime_type.startswith("application/vnd.google-apps")
