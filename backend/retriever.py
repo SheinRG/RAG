@@ -24,12 +24,17 @@ def retrieve(
         # Generate embedding for the query (uses search_query input type for Cohere)
         query_embedding = embedder.embed_query(query).tolist()
 
-        # Build RPC parameters. If we have a filter, fetch more chunks initially to filter locally.
+        # Build RPC parameters. When filtering by document/notebook we over-fetch and
+        # filter in Python.
+        # TODO(recall): this can miss target-doc chunks that rank below the global
+        # candidate window. The correct fix is to push a document_ids filter INTO the
+        # match_chunks Postgres RPC so ranking happens over the filtered set. That
+        # function lives in Supabase, not this repo. Larger window here is a mitigation.
         candidate_count = 25
         rpc_params = {
             "query_embedding": query_embedding,
             "match_user_id": user_id,
-            "match_count": candidate_count if not (document_ids or notebook_id) else 100,
+            "match_count": candidate_count if not (document_ids or notebook_id) else 200,
             "match_threshold": SIMILARITY_THRESHOLD,
         }
 
