@@ -110,3 +110,47 @@ class CohereEmbedder:
 
 embedder = CohereEmbedder()
 logger.info("Cohere embed-english-light-v3.0 ready (384 dims, 100 RPM, zero RAM).")
+
+
+# ─── Reranking (Cohere Rerank API — replaces local torch CrossEncoder, zero RAM) ───
+
+COHERE_RERANK_URL = "https://api.cohere.com/v2/rerank"
+COHERE_RERANK_MODEL = "rerank-v3.5"
+
+
+def rerank_documents(query: str, documents: list, top_n: int = None):
+    """
+    Rerank documents against a query via the Cohere Rerank API.
+    Returns a list of (original_index, relevance_score) tuples ordered best-first.
+    Falls back to the original order with score=None on any error or missing key,
+    so retrieval never breaks if reranking is unavailable.
+    """
+    if not documents:
+        return []
+    if not embedder.api_key:
+        return [(i, None) for i in range(len(documents))]
+
+    try:
+        payload = {
+            "model": COHERE_RERANK_MODEL,
+            "query": query,
+            "documents": documents,
+        }
+        if top_n:
+            payload["top_n"] = min(top_n, len(documents))
+
+        resp = httpx.post(
+            COHERE_RERANK_URL,
+            headers={
+                "Authorization": f"Bearer {embedder.api_key}",
+                "Content-Type": "application/json",
+            },
+            json=payload,
+            timeout=30.0,
+        )
+        resp.raise_for_status()
+        results = resp.json().get("results", [])
+        return [(r["index"], r.get("relevance_score")) for r in results]
+    except Exception as e:
+        logger.warning(f"Cohere rerank failed, falling back to vector order: {e}")
+        return [(i, None) for i in range(len(documents))]

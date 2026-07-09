@@ -6,15 +6,8 @@ pgvector cosine similarity search via Supabase RPC.
 import logging
 from typing import List
 
-from database import supabase, embedder
+from database import supabase, embedder, rerank_documents
 from config import TOP_K, SIMILARITY_THRESHOLD
-
-try:
-    from sentence_transformers import CrossEncoder
-    reranker = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
-except Exception as e:
-    reranker = None
-    print(f"Reranker failed to load: {e}")
 
 logger = logging.getLogger(__name__)
 
@@ -56,47 +49,44 @@ def retrieve(
             logger.info("No matching chunks found.")
             return []
 
-        # Rerank with Cross-Encoder if available
-        if reranker and len(chunks) > 1:
-            # OPTIMIZATION: Only rerank the top 20 chunks to save CPU time
-            chunks_to_rerank = chunks[:20]
-            pairs = [[query, chunk["content"]] for chunk in chunks_to_rerank]
-            scores = reranker.predict(pairs)
-            for i, chunk in enumerate(chunks_to_rerank):
-                chunk["similarity"] = float(scores[i])  # Override similarity with reranker score
-            
-            # Sort by new score descending
-            chunks_to_rerank.sort(key=lambda x: x["similarity"], reverse=True)
-            chunks = chunks_to_rerank
-        
+        # Rerank via Cohere Rerank API (only the top 20 candidates to bound cost).
+        # Falls back to vector order transparently if reranking is unavailable.
+        if len(chunks) > 1:
+            candidates = chunks[:20]
+            ranked = rerank_documents(
+                query, [c["content"] for c in candidates], top_n=top_k
+            )
+            reranked = []
+            for idx, score in ranked:
+                chunk = candidates[idx]
+                if score is not None:
+                    chunk["similarity"] = float(score)  # Override with reranker score
+                reranked.append(chunk)
+            chunks = reranked or candidates
+
         # Finally, trim to top_k
         chunks = chunks[:top_k]
 
-        # Enrich each result with the source document name
-        enriched = []
-        doc_name_cache = {}
+        # Enrich each result with the source document name (single batched lookup)
+        doc_ids = list({chunk["document_id"] for chunk in chunks})
+        doc_name_map = {}
+        if doc_ids:
+            doc_result = (
+                supabase.table("documents")
+                .select("id, original_name")
+                .in_("id", doc_ids)
+                .execute()
+            )
+            doc_name_map = {d["id"]: d["original_name"] for d in (doc_result.data or [])}
 
+        enriched = []
         for chunk in chunks:
             doc_id = chunk["document_id"]
-
-            # Cache document name lookups
-            if doc_id not in doc_name_cache:
-                doc_result = (
-                    supabase.table("documents")
-                    .select("original_name")
-                    .eq("id", doc_id)
-                    .single()
-                    .execute()
-                )
-                doc_name_cache[doc_id] = (
-                    doc_result.data["original_name"] if doc_result.data else "Unknown"
-                )
-
             enriched.append(
                 {
                     "content": chunk["content"],
                     "document_id": doc_id,
-                    "source": doc_name_cache[doc_id],
+                    "source": doc_name_map.get(doc_id, "Unknown"),
                     "similarity": chunk["similarity"],
                 }
             )

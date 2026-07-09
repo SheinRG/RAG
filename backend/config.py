@@ -31,7 +31,8 @@ CHUNK_OVERLAP = 200
 
 # ─── Retrieval ───
 TOP_K = 5
-SIMILARITY_THRESHOLD = 0.10
+# Permissive pre-filter before reranking; tune via env without a code change.
+SIMILARITY_THRESHOLD = float(os.getenv("SIMILARITY_THRESHOLD", "0.10"))
 
 # ─── File Upload ───
 MAX_FILE_SIZE_MB = int(os.getenv("MAX_FILE_SIZE_MB", "20"))
