@@ -8,7 +8,7 @@ import logging
 from typing import AsyncGenerator, List
 
 from groq import AsyncGroq, RateLimitError
-from config import GROQ_API_KEY, GROQ_MODEL
+from config import GROQ_API_KEY, GROQ_MODEL, GROQ_REASONING_EFFORT
 from retriever import retrieve
 
 logger = logging.getLogger(__name__)
@@ -85,6 +85,7 @@ async def ask_stream(
 
         stream = await client.chat.completions.create(
             model=GROQ_MODEL,
+            reasoning_effort=GROQ_REASONING_EFFORT,
             messages=messages,
             stream=True,
             max_tokens=2048,
@@ -119,6 +120,7 @@ Respond ONLY with a JSON object of the form {{"questions": ["Q1?", "Q2?", "Q3?"]
 
             suggestion_resp = await client.chat.completions.create(
                 model=GROQ_MODEL,
+                reasoning_effort=GROQ_REASONING_EFFORT,
                 response_format={"type": "json_object"},
                 messages=[
                     {"role": "system", "content": "You generate follow-up research questions. Respond ONLY with a valid JSON object {\"questions\": [...]}"},

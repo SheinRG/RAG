@@ -17,9 +17,15 @@ SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET", "")
 
 # ─── Groq ───
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
-GROQ_MODEL = "llama-3.1-8b-instant"
+# Groq retired the Llama chat models; gpt-oss is the current general-purpose tier.
+# Override via env when the catalog changes again.
+GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-20b")
+# gpt-oss is a reasoning model: it spends completion tokens thinking before it
+# emits any content, so low-max_tokens calls come back empty at the default
+# effort. "low" keeps thinking to ~20 tokens and fits our existing budgets.
+GROQ_REASONING_EFFORT = os.getenv("GROQ_REASONING_EFFORT", "low")
 # Vision-capable model (override via env if Groq's catalog changes).
-GROQ_VISION_MODEL = os.getenv("GROQ_VISION_MODEL", "meta-llama/llama-4-scout-17b-16e-instruct")
+GROQ_VISION_MODEL = os.getenv("GROQ_VISION_MODEL", "")
 
 # ─── Tavily ───
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY", "")

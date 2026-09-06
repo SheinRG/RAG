@@ -11,7 +11,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from auth_middleware import get_current_user
-from config import GROQ_API_KEY, GROQ_MODEL, TAVILY_API_KEY
+from config import GROQ_API_KEY, GROQ_MODEL, GROQ_REASONING_EFFORT, TAVILY_API_KEY
 from groq import AsyncGroq
 
 logger = logging.getLogger(__name__)
@@ -73,6 +73,7 @@ Respond with ONLY the raw search query string. Nothing else."""
 
             query_response = await client.chat.completions.create(
                 model=GROQ_MODEL,
+                reasoning_effort=GROQ_REASONING_EFFORT,
                 messages=[{"role": "user", "content": query_prompt}],
                 max_tokens=50,
                 temperature=0.1,
@@ -144,6 +145,7 @@ Guidelines:
 
             stream = await client.chat.completions.create(
                 model=GROQ_MODEL,
+                reasoning_effort=GROQ_REASONING_EFFORT,
                 messages=chat_messages,
                 stream=True,
                 max_tokens=1500,
