@@ -17,7 +17,7 @@ from typing import Optional
 
 from auth_middleware import get_current_user
 from database import supabase
-from config import GROQ_API_KEY, GROQ_MODEL
+from config import GROQ_API_KEY, GROQ_MODEL, GROQ_REASONING_EFFORT
 from groq import Groq, RateLimitError
 
 logger = logging.getLogger(__name__)
@@ -96,6 +96,7 @@ def _generate(system: str, user_msg: str, max_tokens: int = 1500, json_mode: boo
     """Synchronous Groq generation. When json_mode=True, asks Groq to emit a JSON object."""
     kwargs = {
         "model": GROQ_MODEL,
+        "reasoning_effort": GROQ_REASONING_EFFORT,
         "messages": [
             {"role": "system", "content": system},
             {"role": "user", "content": user_msg},

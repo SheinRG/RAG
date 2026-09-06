@@ -19,7 +19,7 @@ from pydantic import BaseModel
 from auth_middleware import get_current_user
 from rate_limit import limiter
 from database import supabase, embedder
-from config import GROQ_API_KEY, GROQ_MODEL, GROQ_VISION_MODEL, CHUNK_SIZE, CHUNK_OVERLAP
+from config import GROQ_API_KEY, GROQ_MODEL, GROQ_REASONING_EFFORT, GROQ_VISION_MODEL, CHUNK_SIZE, CHUNK_OVERLAP
 from ingest import run_ingestion
 from retriever import retrieve
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -246,6 +246,14 @@ async def analyze_image(
     if ext not in allowed:
         raise HTTPException(status_code=400, detail=f"Unsupported image type: {ext}")
 
+    # Groq removed every vision-capable model from its catalog, so this endpoint
+    # is only live if an operator points GROQ_VISION_MODEL at a working one.
+    if not GROQ_VISION_MODEL:
+        raise HTTPException(
+            status_code=503,
+            detail="Image analysis is unavailable: no vision model is configured.",
+        )
+
     content = await file.read()
     if len(content) > 20 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="Image exceeds 20MB limit.")
@@ -308,6 +316,7 @@ async def verify_citations(
 
         result = await run_in_threadpool(lambda: client.chat.completions.create(
             model=GROQ_MODEL,
+            reasoning_effort=GROQ_REASONING_EFFORT,
             response_format={"type": "json_object"},
             messages=[
                 {
@@ -416,6 +425,7 @@ async def generate_research_report(
 
             outline_response = await run_in_threadpool(lambda: client.chat.completions.create(
                 model=GROQ_MODEL,
+                reasoning_effort=GROQ_REASONING_EFFORT,
                 messages=[
                     {
                         "role": "system",
@@ -465,6 +475,7 @@ async def generate_research_report(
 
                 section_response = await run_in_threadpool(lambda section=section, ctx=section_context: client.chat.completions.create(
                     model=GROQ_MODEL,
+                    reasoning_effort=GROQ_REASONING_EFFORT,
                     messages=[
                         {
                             "role": "system",

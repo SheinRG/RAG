@@ -11,7 +11,7 @@ from typing import Optional
 
 from database import supabase
 from auth_middleware import get_current_user
-from config import GROQ_API_KEY, GROQ_MODEL
+from config import GROQ_API_KEY, GROQ_MODEL, GROQ_REASONING_EFFORT
 from groq import Groq
 
 logger = logging.getLogger(__name__)
@@ -270,6 +270,7 @@ async def synthesize_notebook(notebook_id: str, user=Depends(get_current_user)):
         completion = await run_in_threadpool(
             lambda: client.chat.completions.create(
                 model=GROQ_MODEL,
+                reasoning_effort=GROQ_REASONING_EFFORT,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.4,
                 max_tokens=2048,
