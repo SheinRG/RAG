@@ -68,9 +68,14 @@ docker-compose up --build
 │   ├── main.py              # FastAPI app assembly
 │   ├── config.py            # Environment config
 │   ├── llm.py               # Groq streaming pipeline
+│   ├── database.py          # Supabase client, embeddings, Cohere rerank
 │   ├── retriever.py         # pgvector search + reranking
 │   ├── ingest.py            # Document processing pipeline
 │   ├── auth_middleware.py   # JWT verification
+│   ├── rate_limit.py        # Per-user request throttling
+│   ├── models/              # Pydantic request/response schemas
+│   ├── utils/               # File handling helpers
+│   ├── migrations/          # SQL migrations (schema + RLS policies)
 │   ├── routes/              # API route handlers
 │   └── Dockerfile
 ├── frontend/
@@ -92,4 +97,3 @@ See `backend/.env.example` and `frontend/.env.example` for required configuratio
 
 MIT
 
-<!-- Maintenance update: 2026-05-06 -->
