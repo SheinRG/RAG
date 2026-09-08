@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Backgro
 
 from database import supabase
 from auth_middleware import get_current_user
-from config import STORAGE_BUCKET
+from config import STORAGE_BUCKET, MAX_FILE_SIZE_BYTES
 from utils.file_handler import validate_file, get_file_type
 from ingest import run_ingestion
 from models.schemas import DocumentResponse, DocumentStatusResponse, DocumentUploadResponse, DocumentRenameRequest
@@ -28,7 +28,16 @@ async def upload_document(
 ):
     """Upload a document and trigger background ingestion."""
     try:
-        content = await file.read()
+        # Reject unsupported types before reading a single byte.
+        ext_ok, ext_error = validate_file(file.filename, 0)
+        if not ext_ok:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=ext_error)
+
+        # Bounded read. file.read() with no argument pulls the entire upload into
+        # memory before the size is ever checked, so a single oversized request
+        # could exhaust the host's RAM. Reading limit+1 bytes is enough to detect
+        # an overrun without ever holding more than the limit.
+        content = await file.read(MAX_FILE_SIZE_BYTES + 1)
         file_size = len(content)
 
         is_valid, error_msg = validate_file(file.filename, file_size)
@@ -170,7 +179,18 @@ async def delete_document(doc_id: str, user=Depends(get_current_user)):
         except Exception as storage_err:
             logger.warning(f"Failed to delete from storage (continuing): {storage_err}")
 
-        supabase.table("documents").delete().eq("id", doc_id).execute()
+        # Delete chunks explicitly rather than relying on the FK cascade alone.
+        # Databases created before 000_initial_schema.sql may lack ON DELETE
+        # CASCADE, and orphaned chunks stay searchable: they keep matching in
+        # retrieval and get fed to the model as context for a source the user
+        # believes is gone.
+        supabase.table("chunks").delete().eq("document_id", doc_id).eq(
+            "user_id", str(user.id)
+        ).execute()
+
+        supabase.table("documents").delete().eq("id", doc_id).eq(
+            "user_id", str(user.id)
+        ).execute()
 
         logger.info(f"Document {doc_id} deleted.")
 
