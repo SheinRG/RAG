@@ -1,0 +1,14 @@
+// Nexus retrieval golden set.
+// Copy to golden_set.jsonl and replace the ids with real document ids from your
+// own account (they are printed by GET /api/documents). One JSON object per line.
+//
+//   question               the query, phrased the way a user would type it
+//   relevant_document_ids  documents that genuinely answer it — the ground truth
+//   must_contain           phrases the retrieved context must include to be groundable
+//   document_ids           optional: restrict retrieval, to test scoped search
+//   notebook_id            optional: restrict retrieval to one notebook
+{"question": "What methodology did the authors use?", "relevant_document_ids": ["00000000-0000-0000-0000-000000000001"], "must_contain": ["methodology"]}
+{"question": "Summarise the main limitations discussed.", "relevant_document_ids": ["00000000-0000-0000-0000-000000000001"], "must_contain": ["limitation"]}
+{"question": "How do the two papers disagree about scaling?", "relevant_document_ids": ["00000000-0000-0000-0000-000000000001", "00000000-0000-0000-0000-000000000002"]}
+{"question": "What is the reported accuracy on the benchmark?", "relevant_document_ids": ["00000000-0000-0000-0000-000000000002"], "must_contain": ["accuracy", "benchmark"]}
+{"question": "What does chapter three say about cost?", "relevant_document_ids": ["00000000-0000-0000-0000-000000000003"], "document_ids": ["00000000-0000-0000-0000-000000000003"]}
