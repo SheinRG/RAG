@@ -7,3 +7,17 @@ __pycache__/
 dist/
 dist-ssr/
 *.local
+
+# Editors
+.vscode/
+.idea/
+
+# Python tooling
+.pytest_cache/
+.mypy_cache/
+
+# Logs
+*.log
+
+# Local scratch notes (personal, not part of the project)
+INTERVIEW_PREP.md
