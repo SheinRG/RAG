@@ -164,7 +164,6 @@ export default function QuizModal({ data, onClose }) {
 
                 let bg = 'rgba(255, 255, 255, 0.6)';
                 let border = 'rgba(255, 255, 255, 0.8)';
-                let textColor = '#2c3e50';
                 
                 if (showAnswer) {
                   if (isSelected) {

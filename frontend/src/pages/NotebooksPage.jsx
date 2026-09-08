@@ -3,9 +3,6 @@ import { useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import useNotebookStore from '../store/notebookStore';
 import useAuthStore from '../store/authStore';
-import api from '../api/client';
-
-const emojiOptions = ['📓', '📚', '🧪', '💡', '🎯', '🔬', '📊', '🗂️', '🎓', '🧠', '⚡', '🌍', '📝', '🏗️', '🎨', '🔧'];
 
 const harmonicPalettes = [
   { bg: 'from-blue-400 to-cyan-400', accent: 'text-blue-600', iconBg: 'bg-blue-100/40', iconBorder: 'border-blue-200/50', gradient: 'rgba(56, 189, 248, 0.07)' },
@@ -261,18 +258,10 @@ export default function NotebooksPage() {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const { notebooks, fetchNotebooks, createNotebook, deleteNotebook, updateNotebook, loading } = useNotebookStore();
-  const [orphanCount, setOrphanCount] = useState(0);
 
   useEffect(() => {
     if (user) {
       fetchNotebooks();
-      // Fetch orphan documents (no notebook_id assigned)
-      api.get('/documents').then(({ data }) => {
-        const orphans = data.filter(d => !d.notebook_id);
-        setOrphanCount(orphans.length);
-      }).catch(err => {
-        console.error('Error fetching orphan docs:', err);
-      });
     }
   }, [fetchNotebooks, user]);
 

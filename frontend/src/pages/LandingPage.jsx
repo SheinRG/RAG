@@ -102,14 +102,6 @@ export default function LandingPage() {
   const heroY = useTransform(scrollYProgress, [0, 0.3], [0, -120]);
   const heroO = useTransform(scrollYProgress, [0, 0.25], [1, 0]);
 
-  // Section reveal variants
-  const fadeUp = {
-    hidden: { opacity: 0, y: 60 },
-    visible: (i = 0) => ({
-      opacity: 1, y: 0,
-      transition: { duration: 0.7, delay: i * 0.15, ease: 'easeOut' },
-    }),
-  };
 
 
   return (

@@ -46,7 +46,7 @@ export function HoverBorderGradient({
 
   return (
     <Tag
-      onMouseEnter={(event) => {
+      onMouseEnter={() => {
         setHovered(true);
       }}
       onMouseLeave={() => setHovered(false)}

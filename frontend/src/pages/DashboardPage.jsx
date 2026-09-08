@@ -6,7 +6,6 @@ import ChatPanel from '../components/chat/ChatPanel';
 import StudioPanel from '../components/studio/StudioPanel';
 import useChatStore from '../store/chatStore';
 import useNotebookStore from '../store/notebookStore';
-import useAuthStore from '../store/authStore';
 
 const PANEL_OPEN_WIDTH = 300;
 const PANEL_CLOSED_WIDTH = 52;
@@ -45,7 +44,6 @@ export default function DashboardPage() {
   const activeDocumentIds = useChatStore((s) => s.activeDocumentIds);
   const switchNotebook = useChatStore((s) => s.switchNotebook);
   const { activeNotebook, setActiveNotebook, createNotebook } = useNotebookStore();
-  const user = useAuthStore((s) => s.user);
 
   const handleCreateNotebook = async () => {
     try {

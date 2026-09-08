@@ -24,8 +24,6 @@ export default function NoteEditorModal({ isOpen, onClose, onSave, editNote, pre
     }
   }, [isOpen, editNote, prefillContent]);
 
-  const [viewMode, setViewMode] = useState('edit'); // 'edit' or 'preview'
-
   const handleSave = () => {
     if (!title.trim()) return;
     onSave({

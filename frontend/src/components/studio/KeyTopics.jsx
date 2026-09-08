@@ -1,13 +1,11 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../../api/client';
-import useChatStore from '../../store/chatStore';
 
 export default function KeyTopics({ activeDocumentIds = [], onTopicClick }) {
   const [topics, setTopics] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [docName, setDocName] = useState('');
   
   // Use the most recently selected document for the study guide
   const focusDocId = activeDocumentIds?.[activeDocumentIds.length - 1] || null;
@@ -23,7 +21,6 @@ export default function KeyTopics({ activeDocumentIds = [], onTopicClick }) {
   useEffect(() => {
     if (!focusDocId) {
       setTopics([]);
-      setDocName('');
       return;
     }
 
@@ -33,7 +30,6 @@ export default function KeyTopics({ activeDocumentIds = [], onTopicClick }) {
       try {
         const { data } = await api.get(`/documents/${focusDocId}/topics`);
         setTopics(data.topics || []);
-        setDocName(data.document_name || '');
       } catch (err) {
         console.error('Failed to fetch topics:', err);
         setError('Could not extract topics');

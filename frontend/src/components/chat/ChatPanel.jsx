@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
 import MessageList from './MessageList';
 import ChatInput from './ChatInput';
 import useChatStore from '../../store/chatStore';
@@ -13,7 +12,6 @@ export default function ChatPanel({ showWebSearch, onCloseWebSearch, initialWebS
   const [editValue, setEditValue] = useState('');
 
   const readyDocs = documents.filter(d => d.status === 'ready');
-  const hasChunks = readyDocs.some(d => d.num_chunks > 0);
 
   // Handle re-ask
   const handleReask = (question) => {
@@ -87,7 +85,7 @@ export default function ChatPanel({ showWebSearch, onCloseWebSearch, initialWebS
             } else if (event.type === 'done') {
               useChatStore.setState({ isStreaming: false });
             }
-          } catch {}
+          } catch { /* ignore malformed SSE line */ }
         }
       }
       useChatStore.setState({ isStreaming: false });

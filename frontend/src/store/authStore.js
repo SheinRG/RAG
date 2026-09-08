@@ -54,7 +54,7 @@ const useAuthStore = create((set) => ({
   signup: async (email, password) => {
     set({ loading: true, error: null });
     try {
-      const { data, error } = await supabase.auth.signUp({ email, password });
+      const { error } = await supabase.auth.signUp({ email, password });
       if (error) throw error;
       set({ loading: false });
       return { success: true, message: 'Account created! Check your email to confirm.' };

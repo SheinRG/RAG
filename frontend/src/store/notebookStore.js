@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import api from '../api/client';
 
-const useNotebookStore = create((set, get) => ({
+const useNotebookStore = create((set) => ({
   notebooks: [],
   activeNotebook: null,
   loading: false,

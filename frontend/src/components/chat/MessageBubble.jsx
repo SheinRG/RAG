@@ -4,7 +4,6 @@ import SourceBadge from './SourceBadge';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import useChatStore from '../../store/chatStore';
-import api from '../../api/client';
 
 // Memoized markdown components — created once, not on every render
 const markdownComponents = {

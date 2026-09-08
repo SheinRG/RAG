@@ -26,7 +26,7 @@ export default function AddSourceModal({ isOpen, onClose, notebookId }) {
     }
   }, [uploadDocument, onClose, notebookId]);
 
-  const { getRootProps, getInputProps, isDragActive, open: openFileDialog } = useDropzone({
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     accept: {
       'application/pdf': ['.pdf'],

@@ -19,7 +19,6 @@ export const BentoGridItem = ({
   title,
   description,
   header,
-  icon,
 }) => {
   return (
     <motion.div
