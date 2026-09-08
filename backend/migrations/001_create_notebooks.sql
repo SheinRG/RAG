@@ -14,9 +14,16 @@ CREATE TABLE IF NOT EXISTS notebooks (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 2. Add notebook_id column to existing documents table
-ALTER TABLE documents 
-ADD COLUMN IF NOT EXISTS notebook_id UUID REFERENCES notebooks(id) ON DELETE CASCADE;
+-- 2. Add notebook_id column to the documents table.
+-- 000_initial_schema.sql declares the bare column (match_chunks references it),
+-- so the foreign key is added separately here -- ADD COLUMN IF NOT EXISTS is a
+-- no-op when the column already exists and would silently skip the FK.
+ALTER TABLE documents
+ADD COLUMN IF NOT EXISTS notebook_id UUID;
+
+ALTER TABLE documents DROP CONSTRAINT IF EXISTS documents_notebook_id_fkey;
+ALTER TABLE documents ADD  CONSTRAINT documents_notebook_id_fkey
+  FOREIGN KEY (notebook_id) REFERENCES notebooks(id) ON DELETE CASCADE;
 
 -- 3. Enable Row Level Security on notebooks
 ALTER TABLE notebooks ENABLE ROW LEVEL SECURITY;

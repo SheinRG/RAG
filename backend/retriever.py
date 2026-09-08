@@ -4,12 +4,112 @@ pgvector cosine similarity search via Supabase RPC.
 """
 
 import logging
-from typing import List
+from typing import List, Optional
 
 from database import supabase, embedder, rerank_documents
 from config import TOP_K, SIMILARITY_THRESHOLD
 
 logger = logging.getLogger(__name__)
+
+# How many nearest neighbours to pull before reranking. With the scope filter
+# pushed into SQL this is a true top-N over the in-scope rows, so a small pool
+# is enough.
+CANDIDATE_POOL = 25
+
+# Legacy path only: the pre-filter-push-down RPC ranks globally, so a scoped
+# query has to over-fetch and discard in Python, and can still miss in-scope
+# chunks that fall outside the global window. Kept solely for databases that
+# have not run 000_initial_schema.sql yet.
+LEGACY_SCOPED_POOL = 200
+
+# Reranking is billed per document, so only the strongest candidates are sent.
+RERANK_CANDIDATES = 20
+
+# Flipped off permanently once we learn this database still has the old 4-arg
+# match_chunks(). Only a schema/signature error flips it — transient failures
+# must not silently downgrade retrieval quality for the rest of the process.
+_filter_pushdown_supported = True
+
+_SIGNATURE_ERROR_MARKERS = (
+    "pgrst202",
+    "could not find the function",
+    "does not exist",
+    "no function matches",
+)
+
+
+def _is_signature_error(exc: Exception) -> bool:
+    """True when the RPC failed because this database lacks the filtered overload."""
+    text = str(exc).lower()
+    return any(marker in text for marker in _SIGNATURE_ERROR_MARKERS)
+
+
+def _fetch_candidates(
+    query_embedding: list,
+    user_id: str,
+    document_ids: Optional[list],
+    notebook_id: Optional[str],
+) -> List[dict]:
+    """
+    Return candidate chunks for the query, scoped to the user and — when asked —
+    to a set of documents or a notebook.
+
+    Preferred path pushes the scope filter into match_chunks() so ranking happens
+    over the filtered set. Falls back to global ranking + Python filtering only
+    on databases that predate 000_initial_schema.sql.
+    """
+    global _filter_pushdown_supported
+
+    scoped = bool(document_ids or notebook_id)
+
+    if _filter_pushdown_supported:
+        params = {
+            "query_embedding": query_embedding,
+            "match_user_id": user_id,
+            "match_count": CANDIDATE_POOL,
+            "match_threshold": SIMILARITY_THRESHOLD,
+            "filter_document_ids": list(document_ids) if document_ids else None,
+            "filter_notebook_id": notebook_id,
+        }
+        try:
+            return supabase.rpc("match_chunks", params).execute().data or []
+        except Exception as e:
+            if not _is_signature_error(e):
+                raise
+            _filter_pushdown_supported = False
+            logger.warning(
+                "match_chunks() has no scope-filter parameters — falling back to "
+                "global ranking with Python-side filtering. Run "
+                "migrations/000_initial_schema.sql to restore filtered recall."
+            )
+
+    # ── Legacy path ──
+    result = supabase.rpc(
+        "match_chunks",
+        {
+            "query_embedding": query_embedding,
+            "match_user_id": user_id,
+            "match_count": LEGACY_SCOPED_POOL if scoped else CANDIDATE_POOL,
+            "match_threshold": SIMILARITY_THRESHOLD,
+        },
+    ).execute()
+    chunks = result.data or []
+
+    if document_ids and chunks:
+        wanted = set(document_ids)
+        chunks = [c for c in chunks if c.get("document_id") in wanted]
+    elif notebook_id and chunks:
+        doc_res = (
+            supabase.table("documents")
+            .select("id")
+            .eq("notebook_id", notebook_id)
+            .eq("user_id", user_id)
+            .execute()
+        )
+        valid_doc_ids = {d["id"] for d in (doc_res.data or [])}
+        chunks = [c for c in chunks if c.get("document_id") in valid_doc_ids]
+
+    return chunks
 
 
 def retrieve(
@@ -19,51 +119,24 @@ def retrieve(
     Embeds the query and performs cosine similarity search against user's chunks.
     Optionally filters by a list of document_ids or a notebook_id.
     Returns a list of dicts with content, document_id, source name, and similarity score.
+
+    Blocking: performs network I/O (embedding, RPC, rerank). Async callers must
+    dispatch it with run_in_threadpool so the event loop stays free.
     """
     try:
         # Generate embedding for the query (uses search_query input type for Cohere)
         query_embedding = embedder.embed_query(query).tolist()
 
-        # Build RPC parameters. When filtering by document/notebook we over-fetch and
-        # filter in Python.
-        # TODO(recall): this can miss target-doc chunks that rank below the global
-        # candidate window. The correct fix is to push a document_ids filter INTO the
-        # match_chunks Postgres RPC so ranking happens over the filtered set. That
-        # function lives in Supabase, not this repo. Larger window here is a mitigation.
-        candidate_count = 25
-        rpc_params = {
-            "query_embedding": query_embedding,
-            "match_user_id": user_id,
-            "match_count": candidate_count if not (document_ids or notebook_id) else 200,
-            "match_threshold": SIMILARITY_THRESHOLD,
-        }
-
-        # Call the match_chunks RPC function
-        result = supabase.rpc("match_chunks", rpc_params).execute()
-        chunks = result.data or []
-
-        # Filter by document_ids or notebook_id in Python
-        if document_ids and chunks:
-            chunks = [c for c in chunks if c.get("document_id") in document_ids]
-        elif notebook_id and chunks:
-            doc_res = (
-                supabase.table("documents")
-                .select("id")
-                .eq("notebook_id", notebook_id)
-                .eq("user_id", user_id)
-                .execute()
-            )
-            valid_doc_ids = {d["id"] for d in doc_res.data}
-            chunks = [c for c in chunks if c.get("document_id") in valid_doc_ids]
+        chunks = _fetch_candidates(query_embedding, user_id, document_ids, notebook_id)
 
         if not chunks:
             logger.info("No matching chunks found.")
             return []
 
-        # Rerank via Cohere Rerank API (only the top 20 candidates to bound cost).
+        # Rerank via Cohere Rerank API (bounded candidate set to cap cost).
         # Falls back to vector order transparently if reranking is unavailable.
         if len(chunks) > 1:
-            candidates = chunks[:20]
+            candidates = chunks[:RERANK_CANDIDATES]
             ranked = rerank_documents(
                 query, [c["content"] for c in candidates], top_n=top_k
             )
