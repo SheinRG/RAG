@@ -19,10 +19,10 @@ An AI-powered research assistant that lets you upload documents (PDF, DOCX, PPTX
 | Layer | Technology |
 |---|---|
 | Frontend | React 19, Vite, TailwindCSS 4, Framer Motion, Zustand |
-| Backend | FastAPI, Python 3.11, Groq (Llama 3.1) |
+| Backend | FastAPI, Python 3.11, Groq (openai/gpt-oss-20b) |
 | Database | Supabase (PostgreSQL + pgvector + Auth + Storage) |
-| Embeddings | sentence-transformers (all-MiniLM-L6-v2) |
-| Reranker | cross-encoder/ms-marco-MiniLM-L-6-v2 |
+| Embeddings | Cohere `embed-english-light-v3.0` (384-dim) |
+| Reranker | Cohere Rerank `rerank-v3.5` |
 | Search | Tavily AI Search API |
 
 ## 🚀 Quick Start
@@ -31,7 +31,9 @@ An AI-powered research assistant that lets you upload documents (PDF, DOCX, PPTX
 - Node.js 20+
 - Python 3.11+
 - Supabase project (with pgvector enabled)
-- Groq API key
+- Groq API key (chat completions)
+- Cohere API key (embeddings + reranking)
+- Tavily API key (optional — web search)
 
 ### Backend
 
