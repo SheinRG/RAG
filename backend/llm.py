@@ -7,6 +7,7 @@ import json
 import logging
 from typing import AsyncGenerator, List
 
+from fastapi.concurrency import run_in_threadpool
 from groq import AsyncGroq, RateLimitError
 from config import GROQ_API_KEY, GROQ_MODEL, GROQ_REASONING_EFFORT
 from retriever import retrieve
@@ -68,7 +69,16 @@ async def ask_stream(
                 # Append last assistant message to give embedder context
                 retrieval_query = f"{last_content}\n\n{question}"
 
-        chunks = retrieve(retrieval_query, user_id, document_ids=document_ids, notebook_id=notebook_id)
+        # retrieve() is blocking (Cohere embed + Supabase RPC + Cohere rerank, each
+        # with multi-second timeouts and a sleeping retry ladder). Running it inline
+        # would stall the event loop for every other request on this worker.
+        chunks = await run_in_threadpool(
+            retrieve,
+            retrieval_query,
+            user_id,
+            document_ids=document_ids,
+            notebook_id=notebook_id,
+        )
 
         # Step 2: Build prompt
         system_prompt = build_system_prompt(chunks)
