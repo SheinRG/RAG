@@ -1,5 +1,7 @@
 # Nexus — Document Intelligence Platform
 
+[![CI](https://github.com/SheinRG/Rag/actions/workflows/ci.yml/badge.svg)](https://github.com/SheinRG/Rag/actions/workflows/ci.yml)
+
 An AI-powered research assistant that lets you upload documents (PDF, DOCX, PPTX, XLSX, TXT, Markdown, YouTube links, images) and have intelligent conversations with them. Built with a RAG (Retrieval-Augmented Generation) pipeline for grounded, cited answers.
 
 ## ✨ Features
@@ -35,6 +37,19 @@ An AI-powered research assistant that lets you upload documents (PDF, DOCX, PPTX
 - Cohere API key (embeddings + reranking)
 - Tavily API key (optional — web search)
 
+### Database
+
+Run the migrations in `backend/migrations/` **in numeric order** in the Supabase
+SQL Editor. `000_initial_schema.sql` creates `documents`, `chunks`, the
+`vector(384)` column, the HNSW index, and the `match_chunks()` RPC that
+retrieval calls — nothing works without it.
+
+```
+000_initial_schema.sql   tables, indexes, match_chunks() with scope filtering
+001_create_notebooks.sql notebooks table + documents.notebook_id
+002_enable_rls.sql       row-level security on documents and chunks
+```
+
 ### Backend
 
 ```bash
@@ -61,6 +76,36 @@ npm run dev
 docker-compose up --build
 ```
 
+## 🧪 Tests
+
+```bash
+cd backend
+pip install -r requirements-dev.txt
+ruff check .
+pytest
+```
+
+Every external service is stubbed, so the suite needs no credentials and cannot
+reach a live Supabase, Cohere, or Groq endpoint. The frontend is checked with
+`npm run lint` and `npm run build`. CI runs all four on every push and PR.
+
+## 📊 Retrieval evaluation
+
+Most bad RAG answers are bad-*context* problems, so retrieval is scored
+directly rather than judged through the model:
+
+```bash
+cd backend
+cp evals/golden_set.example.jsonl evals/golden_set.jsonl   # add your own cases
+python -m evals.run_eval --user-id <your-user-uuid> -k 5 --compare-rerank
+```
+
+Reports hit rate@k, document recall@k, MRR@k, a keyword-coverage groundedness
+proxy, and p50/p95 latency — and with `--compare-rerank`, the measured lift the
+Cohere reranker buys over raw vector order. `--fail-under 0.8` exits non-zero on
+a regression so it can gate a deploy. See
+[`backend/evals/README.md`](backend/evals/README.md) for how to read a run.
+
 ## 📁 Project Structure
 
 ```
@@ -75,8 +120,10 @@ docker-compose up --build
 │   ├── rate_limit.py        # Per-user request throttling
 │   ├── models/              # Pydantic request/response schemas
 │   ├── utils/               # File handling helpers
-│   ├── migrations/          # SQL migrations (schema + RLS policies)
+│   ├── migrations/          # SQL migrations (schema, notebooks, RLS)
 │   ├── routes/              # API route handlers
+│   ├── evals/               # Retrieval evaluation harness
+│   ├── tests/               # pytest suite (all externals stubbed)
 │   └── Dockerfile
 ├── frontend/
 │   ├── src/
@@ -86,6 +133,7 @@ docker-compose up --build
 │   │   └── api/             # Axios + SSE client
 │   ├── nginx.conf           # SPA routing config
 │   └── Dockerfile
+├── .github/workflows/ci.yml # Lint + tests for both halves
 └── docker-compose.yml
 ```
 
