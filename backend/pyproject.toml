@@ -1,0 +1,28 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q --strict-markers"
+asyncio_mode = "strict"
+asyncio_default_fixture_loop_scope = "function"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::UserWarning",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+exclude = ["migrations"]
+
+[tool.ruff.lint]
+# Pyflakes + the pycodestyle errors that catch real mistakes. Style-only rules
+# are deliberately left off so the linter never blocks a correctness fix.
+select = ["E4", "E7", "E9", "F", "B"]
+ignore = [
+    "E402",  # module-level import placement: conftest must set env before importing app code
+    "B008",  # FastAPI's Depends()/File() defaults are the framework's idiom
+    "B904",  # handlers deliberately raise clean HTTPExceptions instead of chaining internal errors
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["F811"]

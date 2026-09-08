@@ -9,8 +9,7 @@ summary, flashcards, and mind map.
 import json
 import re
 import logging
-from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 from typing import Optional

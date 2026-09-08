@@ -13,7 +13,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
-from config import ALLOWED_ORIGINS, ENVIRONMENT
+from config import ALLOWED_ORIGINS
 from rate_limit import limiter
 from routes.auth_routes import router as auth_router
 from routes.document_routes import router as document_router

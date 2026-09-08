@@ -4,8 +4,7 @@ All request/response models for the API.
 """
 
 from pydantic import BaseModel, Field, EmailStr
-from typing import Optional, List
-from datetime import datetime
+from typing import Optional
 
 
 # ─── Auth Schemas ───

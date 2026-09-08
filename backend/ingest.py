@@ -235,7 +235,7 @@ def run_ingestion(
                 embeddings = [e.tolist() for e in embedder.embed(texts)]
 
                 rows = []
-                for c, emb in zip(chunks, embeddings):
+                for c, emb in zip(chunks, embeddings, strict=True):
                     rows.append({
                         "document_id": document_id,
                         "user_id": user_id,
@@ -274,7 +274,7 @@ def run_ingestion(
             embeddings = [e.tolist() for e in embedder.embed(texts)]
 
             rows = []
-            for i, (c, emb) in enumerate(zip(chunks, embeddings)):
+            for i, (c, emb) in enumerate(zip(chunks, embeddings, strict=True)):
                 rows.append({
                     "document_id": document_id,
                     "user_id": user_id,

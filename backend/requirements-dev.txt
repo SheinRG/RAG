@@ -1,0 +1,5 @@
+# Development and CI dependencies (install alongside requirements.txt).
+-r requirements.txt
+pytest
+pytest-asyncio
+ruff

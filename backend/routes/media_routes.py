@@ -12,7 +12,7 @@ import httpx
 import mimetypes
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, BackgroundTasks, Form, Request, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, BackgroundTasks, Form, Request
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 
@@ -66,7 +66,7 @@ def fetch_youtube_transcript(video_id: str) -> list[dict]:
     try:
         # Try fetching default (usually English)
         transcript = ytt_api.fetch(video_id)
-    except:
+    except Exception:
         # If default fails, list all available transcripts
         t_list = ytt_api.list(video_id)
         # Get the first available transcript
@@ -75,7 +75,7 @@ def fetch_youtube_transcript(video_id: str) -> list[dict]:
         if t.language_code != 'en' and t.is_translatable:
             try:
                 t = t.translate('en')
-            except:
+            except Exception:
                 pass
         transcript = t.fetch()
 
@@ -152,7 +152,7 @@ def run_youtube_ingestion(
 
         # Step 4: Store chunks
         rows = []
-        for i, (block, embedding) in enumerate(zip(blocks, embeddings)):
+        for i, (block, embedding) in enumerate(zip(blocks, embeddings, strict=True)):
             rows.append({
                 "document_id": document_id,
                 "user_id": user_id,

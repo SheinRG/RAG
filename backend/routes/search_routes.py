@@ -6,7 +6,7 @@ Global search using Tavily + Groq for AI-synthesized answers.
 import json
 import logging
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
